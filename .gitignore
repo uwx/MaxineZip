@@ -1,0 +1,4 @@
+**/bin
+**/obj
+.idea/.idea.*/.idea/workspace.xml
+*.DotSettings.user

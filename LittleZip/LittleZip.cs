@@ -1,83 +1,65 @@
-﻿/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// LittleZip C#. (GPL) Jose M. Piñeiro
-/// Version: 1.0.0.3 (May 20, 2018)
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// 
-/// This file is Test for libdeflate wrapper
-/// Little can:
-/// - Compress several files in a very little zip
-/// - Compress in very little time
-/// - Use very little code
-/// - Very little learning for use
-/// - Use Storage and Deflate methods. Another methods are not implemented.
-/// 
-/// LittleZip can not:
-/// - Create a large zip ( > 2.147.483.647 bytes)
-/// - Store a large file ( > 2.147.483.647 bytes)
-/// - Use little memory ( need two times the compressed file )
-/// - Decompress one ZIP file. Use LittleUnZip program.
-///
-/// 
-/// Use code from: http://github.com/jaime-olivares/zipstorer
-/// Use library from: https://github.com/ebiggers/libdeflate
-/// Use library from: https://github.com/drivehappy/libzopfli-sharp
-///////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-/// Compress Functions:
-/// LittleZip(string _filename, string _comment)
-/// - Open an existing ZIP file for append files. Create a new ZIP file if not exit. Optionally you can put a general comment.
-/// 
-/// LittleZip Create(Stream _stream, string _comment)
-/// - Open an existing ZIP stream for append files. Create a new ZIP stream if not exit. Optionally you can put a general comment.
-/// 
-/// AddFile(string pathFilename, string filenameInZip, int compressionLevel, string comment)
-/// - Add full contents of a file into the Zip storage. Optionally you can put a file comment.
-/// 
-/// AddBuffer(byte[] inBuffer, string filenameInZip, DateTime modifyTime, int compressionLevel, string comment = "")
-/// - Add full contents of a array into the Zip storage. Optionally you can put a file comment.
-/// 
-/// Close()
-/// - Updates central directory and close the Zip storage. Automatic call in dispose
-/// 
-/// Important note: Compression levels above 12, use ZOPLI library. It is very slow.
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+﻿////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LittleZip C#. (GPL) Jose M. Piñeiro
+// Version: 1.0.0.3 (May 20, 2018)
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// 
+// This file is Test for libdeflate wrapper
+// Little can:
+// - Compress several files in a very little zip
+// - Compress in very little time
+// - Use very little code
+// - Very little learning for use
+// - Use Storage and Deflate methods. Another methods are not implemented.
+// 
+// LittleZip can not:
+// - Create a large zip ( > 2.147.483.647 bytes)
+// - Store a large file ( > 2.147.483.647 bytes)
+// - Use little memory ( need two times the compressed file )
+// - Decompress one ZIP file. Use LittleUnZip program.
+//
+// 
+// Use code from: http://github.com/jaime-olivares/zipstorer
+// Use library from: https://github.com/ebiggers/libdeflate
+// Use library from: https://github.com/drivehappy/libzopfli-sharp
+//////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+// Compress Functions:
+// LittleZip(string _filename, string _comment)
+// - Open an existing ZIP file for append files. Create a new ZIP file if not exit. Optionally you can put a general comment.
+// 
+// LittleZip Create(Stream _stream, string _comment)
+// - Open an existing ZIP stream for append files. Create a new ZIP stream if not exit. Optionally you can put a general comment.
+// 
+// AddFile(string pathFilename, string filenameInZip, int compressionLevel, string comment)
+// - Add full contents of a file into the Zip storage. Optionally you can put a file comment.
+// 
+// AddBuffer(byte[] inBuffer, string filenameInZip, DateTime modifyTime, int compressionLevel, string comment = "")
+// - Add full contents of a array into the Zip storage. Optionally you can put a file comment.
+// 
+// Close()
+// - Updates central directory and close the Zip storage. Automatic call in dispose
+// 
+// Important note: Compression levels above 12, use ZOPLI library. It is very slow.
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+using System.Buffers;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Security;
 using System.Text;
 using System.Threading;
-using System.Windows.Forms;
-
-#if NET45
-using System.Threading.Tasks;
-#endif
 
 namespace System.IO.Compression
 {
-#if NETSTANDARD
-    /// <summary>
-    /// Extension method for covering missing Close() method in .Net Standard
-    /// </summary>
-    public static class StreamExtension
-    {
-        public static void Close(this Stream stream)
-        {
-            stream.Dispose(); 
-            GC.SuppressFinalize(stream);
-        }
-    }
-#endif
-
     /// <summary>
     /// Unique class for compression/decompression file. Represents a Zip file.
     /// </summary>
-    public class LittleZip : IDisposable
+    public sealed class LittleZip : IDisposable
     {
         #region Private structs
         /// <summary>
         /// Compression method enumeration
         /// </summary>
-        private enum Compression : ushort
+        public enum Compression : ushort
         {
             /// <summary>Uncompressed storage</summary> 
             Store = 0,
@@ -89,7 +71,7 @@ namespace System.IO.Compression
         /// <summary>
         /// Represents an entry in Zip file directory
         /// </summary>
-        private struct ZipFileEntry
+        public struct ZipFileEntry
         {
             /// <summary>Compression method</summary>
             public Compression Method;
@@ -116,33 +98,33 @@ namespace System.IO.Compression
             /// <returns>Filename in Zip</returns>
             public override string ToString()
             {
-                return this.FilenameInZip;
+                return FilenameInZip;
             }
         }
 
         #region Public fields
         /// <summary>True if UTF8 encoding for filename and comments, false if default (CP 437)</summary>
-        public bool EncodeUTF8 = false;
+        public bool EncodeUTF8 { get; init; } = false;
         #endregion
 
         #region Private fields
         // List of files to store
-        private List<ZipFileEntry> Files = new List<ZipFileEntry>();
+        public List<ZipFileEntry> Files { get; } = [];
         // Filename of storage file
-        private string FileName;
+        private string _fileName;
         // Stream object of storage file
-        private Stream ZipFileStream;
+        private Stream _zipFileStream;
         // General comment
-        private string Comment = String.Empty;
+        private string _comment = string.Empty;
         // Central dir image
-        private byte[] CentralDirImage = null;
+        private byte[] _centralDirImage;
         // Existing files in zip
-        private ushort ExistingFiles = 0;
-        // Inform of archive blocking the zip file. Null if not blocked.
-        private string Blocked = null;
+        private ushort _existingFiles;
         // Default filename encoder
-        private static Encoding DefaultEncoding = Encoding.GetEncoding(437);
+        private static Encoding DefaultEncoding { get; }
         #endregion
+
+        public long Size => _zipFileStream.Length;
 
         #region Public methods
         /// <summary>
@@ -151,27 +133,25 @@ namespace System.IO.Compression
         /// <param name="pathFilename">Full path of Zip file to create</param>
         /// <param name="zipComment">General comment for Zip file</param>
         /// <returns>LittleZip object</returns>
-        public LittleZip(string pathFilename, string zipComment = "")
+        public LittleZip(string pathFilename, string zipComment = "", bool allowExisting = true)
         {
             Stream zipStream;
 
-            try
+            if (zipComment != "")
+                _comment = zipComment;
+
+            if (allowExisting && File.Exists(pathFilename))
             {
-                if (zipComment != "")
-                    this.Comment = zipComment;
-
-                if(File.Exists(pathFilename))
-                {
-                    zipStream = new FileStream(pathFilename, FileMode.Open, FileAccess.ReadWrite);
-                    ReadFileInfo(zipStream);
-                }
-                else
-                    zipStream = (Stream)new FileStream(pathFilename, FileMode.Create, FileAccess.ReadWrite);
-
-                this.FileName = pathFilename;
-                this.ZipFileStream = zipStream;
+                zipStream = new FileStream(pathFilename, FileMode.Open, FileAccess.ReadWrite);
+                ReadFileInfo(zipStream);
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.Create"); }
+            else
+            {
+                zipStream = new FileStream(pathFilename, FileMode.Create, FileAccess.ReadWrite);
+            }
+
+            _fileName = pathFilename;
+            _zipFileStream = zipStream;
         }
 
         /// <summary>
@@ -180,56 +160,54 @@ namespace System.IO.Compression
         /// <param name="zipStream">Stream Zip to create</param>
         /// <param name="zipComment">General comment for Zip file</param>
         /// <returns>LittleZip object</returns>
-        public LittleZip(Stream zipStream, string zipComment = "")
+        public LittleZip(Stream zipStream, string zipComment = "", bool allowExisting = true)
         {
-            try
+            if (!zipStream.CanSeek)
+                throw new InvalidOperationException("Stream cannot seek");
+
+            if (zipComment != string.Empty)
+                _comment = zipComment;
+
+            if (allowExisting && zipStream.Length > 0)
             {
-                if (!zipStream.CanSeek)
-                    throw new InvalidOperationException("Stream cannot seek");
-
-                if (zipComment != String.Empty)
-                    this.Comment = zipComment;
-
-                if (zipStream.Length > 0)
-                {
-                    this.ZipFileStream = zipStream;
-                    ReadFileInfo(zipStream);
-                }
-                else
-                    this.ZipFileStream = zipStream;
+                _zipFileStream = zipStream;
+                ReadFileInfo(zipStream);
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.Create"); }
+            else
+            {
+                _zipFileStream = zipStream;
+            }
+        }
+
+        static LittleZip()
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            
+            DefaultEncoding = Encoding.GetEncoding("IBM437");
         }
 
         /// <summary>
         /// Add full contents of a file into the Zip storage
         /// </summary>
-        /// <param name="_pathname">Full path of file to add to Zip storage</param>
+        /// <param name="pathFilename">Full path of file to add to Zip storage</param>
         /// <param name="filenameInZip">Filename and path as desired in Zip directory</param>
         /// <param name="compressionLevel">Level os compression. 0 = store, 6 = medium/default, 13 = high</param>
         /// <param name="fileComment">Comment for stored file</param>   
         public void AddFile(string pathFilename, string filenameInZip, int compressionLevel, string fileComment = "")
         {
-            byte[] inBuffer = null;
-            try
-            {
-                //Check the maximun file size
-                if (pathFilename.Length > Int32.MaxValue - 56)
-                    throw new Exception("File is too large to be processed by this program. Maximum size " + (Int32.MaxValue - 56));
+            //Check the maximun file size
+            if (pathFilename.Length > int.MaxValue - 56)
+                throw new Exception("File is too large to be processed by this program. Maximum size " + (int.MaxValue - 56));
 
-                //Read the imput file
-                if (new System.IO.FileInfo(pathFilename).Length > 0)
-                    inBuffer = File.ReadAllBytes(pathFilename);
-                else
-                    inBuffer = new byte[0];
+            //Read the imput file
+            var inBuffer = new FileInfo(pathFilename).Length > 0
+                ? File.ReadAllBytes(pathFilename)
+                : Array.Empty<byte>();
 
-                DateTime modifyTime = File.GetLastWriteTime(pathFilename);
+            var modifyTime = File.GetLastWriteTime(pathFilename);
 
-                //Add inBuffer to Zip
-                AddBuffer(inBuffer, filenameInZip, modifyTime, compressionLevel, fileComment);
-                inBuffer = null;
-            }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.AddFile"); }
+            //Add inBuffer to Zip
+            AddBuffer(inBuffer, filenameInZip, modifyTime, compressionLevel, fileComment);
         }
 
         /// <summary>
@@ -240,20 +218,22 @@ namespace System.IO.Compression
         /// <param name="modifyTime">Modify time for stored file</param>>
         /// <param name="compressionLevel">Level os compression. 0 = store, 6 = medium/default, 13 = high</param>
         /// <param name="fileComment">Comment for stored file</param>   
-        public void AddBuffer(byte[] inBuffer, string filenameInZip, DateTime modifyTime, int compressionLevel = 6, string fileComment = "")
+        public void AddBuffer(ReadOnlySpan<byte> inBuffer, string filenameInZip, DateTime modifyTime, int compressionLevel = 6, string fileComment = "")
         {
+            Handle outBuffer = default;
+
             try
             {
-                byte[] outBuffer = null;
-
                 // Prepare the ZipFileEntry
-                ZipFileEntry zfe = new ZipFileEntry();
-                zfe.FileSize = (uint)inBuffer.Length;
-                zfe.EncodeUTF8 = this.EncodeUTF8;
-                zfe.FilenameInZip = NormalizedFilename(filenameInZip);
-                zfe.Comment = fileComment;
-                zfe.ModifyTime = modifyTime;
-                zfe.Method = Compression.Deflate;
+                var zfe = new ZipFileEntry
+                {
+                    FileSize = (uint)inBuffer.Length,
+                    EncodeUTF8 = EncodeUTF8,
+                    FilenameInZip = NormalizedFilename(filenameInZip),
+                    Comment = fileComment,
+                    ModifyTime = modifyTime,
+                    Method = Compression.Deflate
+                };
 
                 if (compressionLevel == 0 || inBuffer.Length == 0)
                 {
@@ -264,9 +244,22 @@ namespace System.IO.Compression
                 {
                     // Deflate the Source and get ZipFileEntry data
                     if (compressionLevel > 12)
-                        UnsafeNativeMethods.ZopfliDeflate(inBuffer, compressionLevel, out outBuffer, out zfe.CompressedSize, out zfe.Crc32);
+                        UnsafeNativeMethods.ZopfliDeflate(
+                            inBuffer,
+                            compressionLevel,
+                            out outBuffer,
+                            out zfe.CompressedSize,
+                            out zfe.Crc32
+                        );
                     else
-                        UnsafeNativeMethods.Libdeflate(inBuffer, compressionLevel, false, out outBuffer, out zfe.CompressedSize, out zfe.Crc32);
+                        UnsafeNativeMethods.Libdeflate(
+                            inBuffer,
+                            compressionLevel,
+                            true,
+                            out outBuffer,
+                            out zfe.CompressedSize,
+                            out zfe.Crc32
+                        );
 
                     // If not reduced the size, use the original data.
                     if (zfe.CompressedSize == 0)
@@ -276,35 +269,34 @@ namespace System.IO.Compression
                     }
                 }
 
-                //Wait for idle ZipFile stream
-                while (Blocked != filenameInZip)
-                {
-                    if (Blocked == null)
-                        Blocked = filenameInZip;
-                    else
-                    {
-                        Thread.Sleep(5);
-                        Application.DoEvents();
-                    }
-                }
+                // //Wait for idle ZipFile stream
+                // while (Blocked != filenameInZip)
+                // {
+                //     if (Blocked == null)
+                //         Blocked = filenameInZip;
+                //     else
+                //     {
+                //         Thread.Sleep(5);
+                //     }
+                // }
 
                 // Write local header
-                zfe.HeaderOffset = (uint)this.ZipFileStream.Position;  // offset within file of the start of this local record
+                zfe.HeaderOffset = (uint)_zipFileStream.Position; // offset within file of the start of this local record
                 WriteLocalHeader(ref zfe);
 
                 // Write deflate data (or original data if can´t deflate) to zip
-                if (zfe.Method == Compression.Deflate)
-                    this.ZipFileStream.Write(outBuffer, 0, (int)zfe.CompressedSize);
-                else
-                    this.ZipFileStream.Write(inBuffer, 0, inBuffer.Length);
+                _zipFileStream.Write(zfe.Method == Compression.Deflate ? outBuffer.Data : inBuffer);
 
                 //Add file in the Zip Directory struct
                 Files.Add(zfe);
 
-                //unblock zip file
-                Blocked = null;
+                // //unblock zip file
+                // Blocked = null;
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.AddBuffer"); }
+            finally
+            {
+                outBuffer.Dispose();
+            }
         }
 
         /// <summary>
@@ -313,34 +305,30 @@ namespace System.IO.Compression
         /// <remarks>This is a required step, unless automatic dispose is used</remarks>
         public void Close()
         {
-            try
+            var centralOffset = (uint)_zipFileStream.Position;
+            uint centralSize = 0;
+
+            if (_centralDirImage != null!)
+                _zipFileStream.Write(_centralDirImage, 0, _centralDirImage.Length);
+
+            foreach (var t in Files)
             {
-                uint centralOffset = (uint)this.ZipFileStream.Position;
-                uint centralSize = 0;
-
-                if (this.CentralDirImage != null)
-                    this.ZipFileStream.Write(CentralDirImage, 0, CentralDirImage.Length);
-
-                for (int i = 0; i < Files.Count; i++)
-                {
-                    long pos = this.ZipFileStream.Position;
-                    this.WriteCentralDirRecord(Files[i]);
-                    centralSize += (uint)(this.ZipFileStream.Position - pos);
-                }
-
-                if (this.CentralDirImage != null)
-                    this.WriteEndRecord(centralSize + (uint)CentralDirImage.Length, centralOffset);
-                else
-                    this.WriteEndRecord(centralSize, centralOffset);
-
-                if (this.ZipFileStream != null)
-                {
-                    this.ZipFileStream.Flush();
-                    this.ZipFileStream.Dispose();
-                    this.ZipFileStream = null;
-                }
+                var pos = _zipFileStream.Position;
+                WriteCentralDirRecord(t);
+                centralSize += (uint)(_zipFileStream.Position - pos);
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.Close"); }
+
+            if (_centralDirImage != null)
+                WriteEndRecord(centralSize + (uint)_centralDirImage.Length, centralOffset);
+            else
+                WriteEndRecord(centralSize, centralOffset);
+
+            if (_zipFileStream != null!)
+            {
+                _zipFileStream.Flush();
+                _zipFileStream.Dispose();
+                _zipFileStream = null!;
+            }
         }
         #endregion
 
@@ -361,30 +349,26 @@ namespace System.IO.Compression
             filename (variable size)
             extra field (variable size). This implementation not use extra field for minimize ZIP size.
         */
-        private void WriteLocalHeader(ref ZipFileEntry _zfe)
+        private void WriteLocalHeader(ref ZipFileEntry zfe)
         {
-            try
-            {
-                //Encode filename
-                Encoding encoder = _zfe.EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
-                byte[] encodedFilename = encoder.GetBytes(_zfe.FilenameInZip);
+            //Encode filename
+            var encoder = zfe.EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
+            var encodedFilename = encoder.GetBytes(zfe.FilenameInZip);
 
-                //Write local header
-                this.ZipFileStream.Write(new byte[] { 0x50, 0x4b, 0x03, 0x04, 0x14, 0x00 }, 0, 6);              // local file header signature + version needed to extract
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)(_zfe.EncodeUTF8 ? 0x0800 : 0)), 0, 2);  // filename encoding 
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)_zfe.Method), 0, 2);                     // zipping method
-                this.ZipFileStream.Write(BitConverter.GetBytes(DateTimeToDosTime(_zfe.ModifyTime)), 0, 4);      // zipping date and time
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.Crc32), 0, 4);                              // CRC32
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.CompressedSize), 0, 4);                     // Compressed size
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.FileSize), 0, 4);                           // Uncompressed size
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)encodedFilename.Length), 0, 2);          // filename length
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0), 0, 2);                               // extra length = 0
-                this.ZipFileStream.Write(encodedFilename, 0, encodedFilename.Length);
+            //Write local header
+            _zipFileStream.Write([ 0x50, 0x4b, 0x03, 0x04, 0x14, 0x00 ]);              // local file header signature + version needed to extract
+            Write((ushort)(zfe.EncodeUTF8 ? 0x0800 : 0));  // filename encoding 
+            Write((ushort)zfe.Method);                     // zipping method
+            Write(DateTimeToDosTime(zfe.ModifyTime));      // zipping date and time
+            Write(zfe.Crc32);                              // CRC32
+            Write(zfe.CompressedSize);                     // Compressed size
+            Write(zfe.FileSize);                           // Uncompressed size
+            Write((ushort)encodedFilename.Length);          // filename length
+            Write((ushort)0);                               // extra length = 0
+            _zipFileStream.Write(encodedFilename, 0, encodedFilename.Length);
 
-                // Add header size to the Zip Directory struct
-                _zfe.HeaderSize = (uint)(30 + encodedFilename.Length);
-            }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.WriteLocalHeader"); }
+            // Add header size to the Zip Directory struct
+            zfe.HeaderSize = (uint)(30 + encodedFilename.Length);
         }
 
         /* Central directory's File header:
@@ -410,67 +394,100 @@ namespace System.IO.Compression
             extra field (variable size)
             file comment (variable size)
         */
-        private void WriteCentralDirRecord(ZipFileEntry _zfe)
+        private void WriteCentralDirRecord(ZipFileEntry zfe)
         {
-            try
-            {
-                Encoding encoder = _zfe.EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
-                byte[] encodedFilename = encoder.GetBytes(_zfe.FilenameInZip);
-                byte[] encodedComment = encoder.GetBytes(_zfe.Comment);
+            var encoder = zfe.EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
+            var encodedFilename = encoder.GetBytes(zfe.FilenameInZip);
+            var encodedComment = encoder.GetBytes(zfe.Comment);
 
-                this.ZipFileStream.Write(new byte[] { 0x50, 0x4b, 0x01, 0x02, 0x17, 0x0B, 0x14, 0x00 }, 0, 8);  // central file header signature + version made by + version needed to extract
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)(_zfe.EncodeUTF8 ? 0x0800 : 0)), 0, 2);  // filename and comment encoding 
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)_zfe.Method), 0, 2);                     // zipping method
-                this.ZipFileStream.Write(BitConverter.GetBytes(DateTimeToDosTime(_zfe.ModifyTime)), 0, 4);      // zipping date and time
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.Crc32), 0, 4);                              // file CRC
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.CompressedSize), 0, 4);                     // compressed file size
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.FileSize), 0, 4);                           // uncompressed file size
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)encodedFilename.Length), 0, 2);          // length of Filename in zip
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0), 0, 2);                               // extra length = 0
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)encodedComment.Length), 0, 2);
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0), 0, 2);                               // disk=0
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0), 0, 2);                               // file type: binary
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0), 0, 2);                               // Internal file attributes
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)0x8100), 0, 2);                          // External file attributes (normal/readable)
-                this.ZipFileStream.Write(BitConverter.GetBytes(_zfe.HeaderOffset), 0, 4);                       // Offset of header
-                this.ZipFileStream.Write(encodedFilename, 0, encodedFilename.Length);                           // Filename in zip
-                this.ZipFileStream.Write(encodedComment, 0, encodedComment.Length);                             // Comment of file
+            _zipFileStream.Write([ 0x50, 0x4b, 0x01, 0x02, 0x17, 0x0B, 0x14, 0x00 ]);  // central file header signature + version made by + version needed to extract
+            
+            Write((ushort)(zfe.EncodeUTF8 ? 0x0800 : 0));  // filename and comment encoding 
+            Write((ushort)zfe.Method);                     // zipping method
+            Write(DateTimeToDosTime(zfe.ModifyTime));      // zipping date and time
+            Write(zfe.Crc32);                              // file CRC
+            Write(zfe.CompressedSize);                     // compressed file size
+            Write(zfe.FileSize);                           // uncompressed file size
+            Write((ushort)encodedFilename.Length);         // length of Filename in zip
+            Write((ushort)0);                              // extra length = 0
+            Write((ushort)encodedComment.Length);          // file comment length
+            Write((ushort)0);                              // disk=0
+            Write((ushort)0);                              // file type: binary
+            Write((ushort)0);                              // Internal file attributes
+            Write((ushort)0x8100);                         // External file attributes (normal/readable)
+            Write(zfe.HeaderOffset);                       // Offset of header
+            _zipFileStream.Write(encodedFilename, 0, encodedFilename.Length); // Filename in zip
+            _zipFileStream.Write(encodedComment, 0, encodedComment.Length);   // Comment of file
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private unsafe void Write<T>(T value) where T : unmanaged
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            static bool TryWriteBytes(Span<byte> destination, T value)
+            {
+                if (typeof(T) == typeof(ushort)) return BitConverter.TryWriteBytes(destination, (ushort)(object)value);
+                if (typeof(T) == typeof(uint)) return BitConverter.TryWriteBytes(destination, (uint)(object)value);
+
+                return false;
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.WriteCentralDirRecord"); }
+
+            Span<byte> temp = stackalloc byte[sizeof(T)];
+            TryWriteBytes(temp, value);
+            _zipFileStream.Write(temp);
         }
 
         /* End of central dir record:
             end of central dir signature    4 bytes  (0x06054b50)
             number of this disk             2 bytes
-            number of the disk with the
-            start of the central directory  2 bytes
-            total number of entries in
-            the central dir on this disk    2 bytes
-            total number of entries in
-            the central dir                 2 bytes
+            number of the disk with the start of the central directory  2 bytes
+            total number of entries in the central dir on this disk    2 bytes
+            total number of entries in the central dir                 2 bytes
             size of the central directory   4 bytes
-            offset of start of central
-            directory with respect to
-            the starting disk number        4 bytes
+            offset of start of central directory with respect to the starting disk number        4 bytes
             zipfile comment length          2 bytes
             zipfile comment (variable size)
         */
-        private void WriteEndRecord(uint _size, uint _offset)
+        private void WriteEndRecord(uint size, uint offset)
         {
-            try
-            {
-                Encoding encoder = this.EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
-                byte[] encodedComment = encoder.GetBytes(this.Comment);
+            _zipFileStream.Write([ 0x50, 0x4B, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00 ]); // End of central directory signature = 0x06054b50 + Number of this disk + Disk where central directory starts
 
-                this.ZipFileStream.Write(new byte[] { 80, 75, 5, 6, 0, 0, 0, 0 }, 0, 8);
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)Files.Count + ExistingFiles), 0, 2);
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)Files.Count + ExistingFiles), 0, 2);
-                this.ZipFileStream.Write(BitConverter.GetBytes(_size), 0, 4);
-                this.ZipFileStream.Write(BitConverter.GetBytes(_offset), 0, 4);
-                this.ZipFileStream.Write(BitConverter.GetBytes((ushort)encodedComment.Length), 0, 2);
-                this.ZipFileStream.Write(encodedComment, 0, encodedComment.Length);
+            Span<byte> temp = stackalloc byte[2];
+            BitConverter.TryWriteBytes(temp, (ushort)(Files.Count + _existingFiles));
+            _zipFileStream.Write(temp); // Number of central directory records on this disk (or 0xffff for ZIP64)
+            _zipFileStream.Write(temp); // Total number of central directory records (or 0xffff for ZIP64)
+
+            Write(size); // Size of central directory (bytes) (or 0xffffffff for ZIP64)
+
+            Write(offset); // Offset of start of central directory, relative to start of archive (or 0xffffffff for ZIP64)
+            
+            if (_comment.Length > 0)
+            {
+                WriteLengthPrefixedStringFast(_comment);
             }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.WriteEndRecord"); }
+            else
+            {
+                Write((ushort)0);
+            }
+        }
+
+        private void WriteLengthPrefixedStringFast(string str)
+        {
+            var encoder = EncodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
+            var useArray = str.Length > 128;
+            var encodedComment = useArray ? encoder.GetBytes(_comment) : stackalloc byte[encoder.GetByteCount(_comment)];
+            var bytesWritten = encodedComment.Length;
+            if (!useArray)
+            {
+                if (!encoder.TryGetBytes(str, encodedComment, out bytesWritten))
+                {
+                    encodedComment = encoder.GetBytes(str);
+                    bytesWritten = encodedComment.Length;
+                }
+            }
+
+            Write((ushort)bytesWritten);
+            _zipFileStream.Write(encodedComment[..bytesWritten]);
         }
 
         /* DOS Date and time:
@@ -483,74 +500,540 @@ namespace System.IO.Compression
                 5-10 Minute (059) 
                 11-15 Hour (023 on a 24-hour clock) 
         */
-        private uint DateTimeToDosTime(DateTime _dt)
+        private static uint DateTimeToDosTime(DateTime dt)
         {
             return (uint)(
-                (_dt.Second / 2) | (_dt.Minute << 5) | (_dt.Hour << 11) |
-                (_dt.Day << 16) | (_dt.Month << 21) | ((_dt.Year - 1980) << 25));
+                (dt.Second / 2) | (dt.Minute << 5) | (dt.Hour << 11) |
+                (dt.Day << 16) | (dt.Month << 21) | ((dt.Year - 1980) << 25));
+        }
+        
+        /* DOS Date and time:
+            MS-DOS date. The date is a packed value with the following format. Bits Description
+                0-4 Day of the month (131)
+                5-8 Month (1 = January, 2 = February, and so on)
+                9-15 Year offset from 1980 (add 1980 to get actual year)
+            MS-DOS time. The time is a packed value with the following format. Bits Description
+                0-4 Second divided by 2
+                5-10 Minute (059)
+                11-15 Hour (023 on a 24-hour clock)
+        */
+        private static DateTime DosTimeToDateTime(uint dt)
+        {
+            return new DateTime(
+                (int)(dt >> 25) + 1980,
+                (int)(dt >> 21) & 15,
+                (int)(dt >> 16) & 31,
+                (int)(dt >> 11) & 31,
+                (int)(dt >> 5) & 63,
+                (int)(dt & 31) * 2);
         }
 
         // Replaces backslashes with slashes to store in zip header. Remove unit letter
-        private string NormalizedFilename(string _filename)
+        private static string NormalizedFilename(string filename)
         {
-            try
-            {
-                string filename = _filename.Replace('\\', '/');
+            Span<char> filenameSpan = stackalloc char[filename.Length];
+            filename.AsSpan().Replace(filenameSpan, '\\', '/');
 
-                int pos = filename.IndexOf(':');
-                if (pos >= 0)
-                    filename = filename.Remove(0, pos + 1);
+            var pos = filenameSpan.IndexOf(':');
+            if (pos >= 0)
+                filenameSpan = filenameSpan[(pos + 1)..];
 
-                return filename.Trim('/');
-            }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn LittleZip.NormalizedFilename"); }
+            return new string(filenameSpan.Trim('/'));
         }
 
         /// <summary>
         /// Reads the end-of-central-directory record
         /// </summary>
         /// <returns></returns>
+        #if REPAIR
         private void ReadFileInfo(Stream zipFileStream)
         {
             if (zipFileStream.Length < 22)
-                throw new System.IO.InvalidDataException("Invalid ZIP file");
+                throw new InvalidDataException("Invalid ZIP file");
 
             try
             {
-                zipFileStream.Seek(-17, SeekOrigin.End);
-                BinaryReader br = new BinaryReader(zipFileStream);
+                zipFileStream.Seek(-15, SeekOrigin.End);
+                var br = new BinaryReader(zipFileStream);
                 do
                 {
                     zipFileStream.Seek(-5, SeekOrigin.Current);
-                    UInt32 sig = br.ReadUInt32();
+                    var sig = br.ReadUInt32();
                     if (sig == 0x06054b50)
                     {
                         zipFileStream.Seek(6, SeekOrigin.Current);
 
-                        UInt16 entries = br.ReadUInt16();
-                        Int32 centralSize = br.ReadInt32();
-                        UInt32 centralDirOffset = br.ReadUInt32();
-                        UInt16 commentSize = br.ReadUInt16();
+                        var entries = br.ReadUInt16();
+                        var centralSize = br.ReadInt32();
+                        var centralDirOffset = br.ReadUInt32();
+                        
+                        if (zipFileStream.Position != zipFileStream.Length)
+                            throw new InvalidDataException("ZIP not corrupted!");
+                        
+                        // var commentSize = br.ReadUInt16();
 
                         // check if comment field is the very last data in file
-                        if (zipFileStream.Position + commentSize != zipFileStream.Length)
-                            throw new System.IO.InvalidDataException("Invalid ZIP file");
+                        // if (zipFileStream.Position + commentSize != zipFileStream.Length)
+                        //    throw new InvalidDataException("Invalid ZIP file");
 
                         // Copy entire central directory to a memory buffer
-                        this.ExistingFiles = entries;
-                        this.CentralDirImage = new byte[centralSize];
+                        _existingFiles = entries;
+                        _centralDirImage = new byte[centralSize];
                         zipFileStream.Seek(centralDirOffset, SeekOrigin.Begin);
-                        zipFileStream.Read(this.CentralDirImage, 0, centralSize);
+                        zipFileStream.ReadExactly(_centralDirImage);
 
                         // Leave the pointer at the begining of central dir, to append new files
                         zipFileStream.Seek(centralDirOffset, SeekOrigin.Begin);
                         return;
                     }
                 } while (zipFileStream.Position > 0);
-                throw new System.IO.InvalidDataException("Invalid ZIP file");
+
+                throw new InvalidDataException("Invalid ZIP file");
             }
-            catch { throw new System.IO.InvalidDataException("Invalid ZIP file"); }
+            catch (InvalidDataException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("Invalid ZIP file", ex);
+            }
         }
+        #else
+        private void ReadFileInfo(Stream zipFileStream, bool readWholeZip = true)
+        {
+            if (zipFileStream.Length < 22)
+                throw new InvalidDataException("Invalid ZIP file");
+
+            try
+            {
+                if (readWholeZip)
+                {
+                    if (!ReadZipInfo(zipFileStream))
+                    {
+                        throw new InvalidDataException("Invalid ZIP file");
+                    }
+                }
+                else
+                {
+                    zipFileStream.Seek(-17, SeekOrigin.End);
+                    var br = new BinaryReader(zipFileStream);
+                    do
+                    {
+                        zipFileStream.Seek(-5, SeekOrigin.Current);
+                        var sig = br.ReadUInt32();
+                        if (sig == 0x06054b50)
+                        {
+                            zipFileStream.Seek(6, SeekOrigin.Current);
+
+                            var entries = br.ReadUInt16();
+                            var centralSize = br.ReadInt32();
+                            var centralDirOffset = br.ReadUInt32();
+                            var commentSize = br.ReadUInt16();
+
+                            // check if comment field is the very last data in file
+                            if (zipFileStream.Position + commentSize != zipFileStream.Length)
+                                throw new InvalidDataException("Invalid ZIP file");
+
+                            // Copy entire central directory to a memory buffer
+                            _existingFiles = entries;
+                            _centralDirImage = new byte[centralSize];
+                            zipFileStream.Seek(centralDirOffset, SeekOrigin.Begin);
+                            zipFileStream.ReadExactly(_centralDirImage);
+
+                            // Leave the pointer at the begining of central dir, to append new files
+                            zipFileStream.Seek(centralDirOffset, SeekOrigin.Begin);
+                            return;
+                        }
+                    } while (zipFileStream.Position > 0);
+                }
+            }
+            catch (InvalidDataException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException("Invalid ZIP file", ex);
+            }
+        }
+        
+        private bool ReadZipInfo(Stream zipStream)
+        {
+            byte[]? centralDirArray = null;                  // Central dir image
+            try
+            {
+                //Find begin of End of central directory record (EOCD)
+                zipStream.Seek(-17, SeekOrigin.End);
+
+                int centralSize;
+                uint centralDirOffset;
+                {
+                    var br = new BinaryReader(zipStream);
+                    
+                    uint sig;
+                    do
+                    {
+                        zipStream.Seek(-5, SeekOrigin.Current);
+                        sig = br.ReadUInt32();
+                    } while (zipStream.Position > 0 && sig != 0x06054b50);
+
+                    //Check that found End of central directory signature = 0x06054b50 
+                    if (sig != 0x06054b50)
+                    {
+                        return false;
+                    }
+
+                    zipStream.Seek(6, SeekOrigin.Current);
+                    var entries = br.ReadUInt16();
+                    centralSize = br.ReadInt32();
+                    centralDirOffset = br.ReadUInt32();
+                    var commentSize = br.ReadUInt16();
+                    var zipComment = br.ReadChars(commentSize);
+                    _comment = new string(zipComment);
+
+                    // _existingFiles = entries;
+                }
+
+                // Copy entire central directory to a memory buffer
+                centralDirArray = centralSize >= 1024 ? ArrayPool<byte>.Shared.Rent(centralSize) : null;
+                var centralDirImage = centralSize < 1024 ? stackalloc byte[centralSize] : centralDirArray;
+                zipStream.Seek(centralDirOffset, SeekOrigin.Begin);
+                zipStream.ReadExactly(centralDirImage);
+
+                //Read ZipEntrys
+                /* Central directory's File header:
+                   central file header signature   4 bytes  (0x02014b50)
+                   version made by                 2 bytes
+                   version needed to extract       2 bytes
+                   general purpose bit flag        2 bytes
+                   compression method              2 bytes
+                   last mod file time              2 bytes
+                   last mod file date              2 bytes
+                   crc-32                          4 bytes
+                   compressed size                 4 bytes
+                   uncompressed size               4 bytes
+                   filename length                 2 bytes
+                   extra field length              2 bytes
+                   file comment length             2 bytes
+                   disk number start               2 bytes
+                   internal file attributes        2 bytes
+                   external file attributes        4 bytes
+                   relative offset of local header 4 bytes
+                   filename (variable size)
+                   extra field (variable size)
+                   file comment (variable size)
+                */
+                var pointer = 0;
+                {
+                    var br = new SpanReader(centralDirImage);
+                    while (pointer < centralDirImage.Length)
+                    {
+                        var signature = br.ReadUInt32();
+                        if (signature != 0x02014b50)
+                        {
+                            break;
+                        }
+
+                        br.Position += 4; // skip version made by, version needed to extract
+
+                        var zfe = new ZipFileEntry();
+
+                        var encodeUTF8 = (br.ReadUInt16() & 0x0800) != 0; //True if UTF8 encoding for filename and comments, false if default (CP 437)
+                        var encoder = encodeUTF8 ? Encoding.UTF8 : DefaultEncoding;
+                        zfe.Method = (Compression)br.ReadUInt16();
+                        zfe.ModifyTime = DosTimeToDateTime(br.ReadUInt32());
+                        zfe.Crc32 = br.ReadUInt32();
+                        zfe.CompressedSize = br.ReadUInt32();
+                        zfe.FileSize = br.ReadUInt32();
+                        var filenameSize = br.ReadUInt16();
+                        var extraSize = br.ReadUInt16();
+                        var fileCommentSize = br.ReadUInt16();
+                        br.Position += 8; // skip disk number start, internal file attributes, external file attributes
+                        zfe.HeaderOffset = br.ReadUInt32();
+                        zfe.HeaderSize = (uint)(46 + filenameSize + extraSize + fileCommentSize);
+                        zfe.FilenameInZip = encoder.GetString(centralDirImage.Slice(pointer + 46, filenameSize));
+
+                        if (fileCommentSize > 0)
+                        {
+                            zfe.Comment = encoder.GetString(
+                                centralDirImage.Slice(
+                                    pointer + 46 + filenameSize + extraSize,
+                                    fileCommentSize
+                                )
+                            );
+                        }
+                        else
+                        {
+                            zfe.Comment = "";
+                        }
+
+                        Files.Add(zfe);
+                        pointer += (int)zfe.HeaderSize;
+                    }
+                }
+
+                // Leave the pointer at the begining of central dir, to append new files
+                zipStream.Seek(centralDirOffset, SeekOrigin.Begin);
+
+                return true;
+            }
+            finally
+            {
+                if (centralDirArray != null) ArrayPool<byte>.Shared.Return(centralDirArray);
+            }
+        }
+        #endif
+        #endregion
+
+        #region Unzip
+
+        public Stream? OpenFile(ZipFileEntry zfe)
+        {
+            // check signature
+            var signature = new byte[4];
+            _zipFileStream.Seek(zfe.HeaderOffset, SeekOrigin.Begin);
+            _zipFileStream.ReadExactly(signature, 0, 4);
+            if (BitConverter.ToUInt32(signature, 0) != 0x04034b50)
+            {
+                return null;
+            }
+
+            //Seek to begin of compress data
+            var br = new BinaryReader(_zipFileStream);
+            _zipFileStream.Seek(zfe.HeaderOffset + 26, SeekOrigin.Begin);
+            var fileNameLength = br.ReadUInt16();
+            var extraFieldLength = br.ReadUInt16();
+            _zipFileStream.Seek(fileNameLength + extraFieldLength, SeekOrigin.Current);
+
+            // Select input stream for inflating or just reading
+            return zfe.Method switch
+            {
+                Compression.Store => new NoDisposeStream(_zipFileStream),
+                Compression.Deflate => new DeflateStream(_zipFileStream, CompressionMode.Decompress, true),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Copy the contents of a stored file into an opened stream
+        /// </summary>
+        /// <param name="zfe">Entry information of file to extract</param>
+        /// <param name="outStream">Stream to store the uncompressed data</param>
+        /// <param name="bufferSize">Buffer size to use when extracting</param>
+        /// <returns>True if success, false if not.</returns>
+        /// <remarks>Unique decompression methods are Store and Deflate</remarks>
+        public bool ExtractFile(ZipFileEntry zfe, Stream outStream, int bufferSize = 1024*1024)
+        {
+            if (!outStream.CanWrite)
+            {
+                throw new InvalidOperationException("Stream cannot be written");
+            }
+
+            var deflatedStream = OpenFile(zfe);
+
+            if (deflatedStream == null) return false;
+
+            byte[]? buffer = null;
+            try
+            {
+                //Inicialize CRC
+                var crc32 = 0xffffffff;
+
+                // Buffered copy
+                buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+
+                var bspan = buffer.AsSpan();
+                var bytesPending = zfe.FileSize;
+                while (bytesPending > 0)
+                {
+                    var bytesRead = deflatedStream.Read(buffer, 0, (int)Math.Min(bytesPending, buffer.Length));
+                    crc32 = Polynomials.Crc32(crc32, bspan[..bytesRead]);
+                    bytesPending -= (uint)bytesRead;
+                    outStream.Write(buffer, 0, bytesRead);
+                }
+
+                outStream.Flush();
+
+                //Verify data integrity
+                crc32 ^= 0xffffffff;
+                return zfe.Crc32 == crc32;
+            }
+            finally
+            {
+                if (zfe.Method == Compression.Deflate)
+                {
+                    deflatedStream.Dispose();
+                }
+
+                if (buffer != null)
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Copy the contents of a stored file into an opened stream
+        /// </summary>
+        /// <param name="filename">Filename to extract</param>
+        /// <param name="outStream">Stream to store the uncompressed data</param>
+        /// <returns>True if success, false if not.</returns>
+        /// <remarks>Unique decompression methods are Store and Deflate</remarks>
+        public bool ExtractFile(string filename, Stream outStream)
+        {
+            var entry = Files.FindAll(name => name.FilenameInZip == filename);
+            var zfe = entry[0];
+
+            return ExtractFile(zfe, outStream);
+        }
+
+        /// <summary>
+        /// Copy the contents of a stored file into an opened stream
+        /// </summary>
+        /// <param name="zipFilename">Name in ZIP to extract</param>
+        /// <param name="outPathFilename">Name of file to store uncompressed data</param>
+        /// <returns>True if success, false if not.</returns>
+        /// <remarks>Unique decompression methods are Store and Deflate</remarks>
+        public bool ExtractFile(string zipFilename, string outPathFilename)
+        {
+            var entry = Files.FindAll(name => name.FilenameInZip == zipFilename);
+            var zfe = entry[0];
+
+            return ExtractFile(zfe, outPathFilename);
+        }
+
+        /// <summary>
+        /// Copy the contents of a stored file into a physical file
+        /// </summary>
+        /// <param name="zfe">Entry information of file to extract</param>
+        /// <param name="outPathFilename">Name of file to store uncompressed data</param>
+        /// <param name="createDirectory">Create the parent directory if not exists</param>
+        /// <returns>True if success, false if not.</returns>
+        /// <remarks>Unique decompression methods are Store and Deflate</remarks>
+        public bool ExtractFile(ZipFileEntry zfe, string outPathFilename, bool createDirectory = true)
+        {
+            // Make sure the parent directory exist
+            if (createDirectory)
+            {
+                var path = Path.GetDirectoryName(outPathFilename);
+                if (path != null && !Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                }
+            }
+
+            // Check it is directory. If so, do nothing
+            if (Directory.Exists(outPathFilename))
+            {
+                return true;
+            }
+
+            using (var output = new FileStream(outPathFilename, FileMode.Create, FileAccess.Write))
+            {
+                if (!ExtractFile(zfe, output))
+                {
+                    return false;
+                }
+            }
+
+            //Change file datetimes
+            // while (IsFileLocked(outPathFilename))
+            // {
+            //     MediaTypeNames.Application.DoEvents();
+            // }
+            File.SetCreationTime(outPathFilename, zfe.ModifyTime);
+            File.SetLastWriteTime(outPathFilename, zfe.ModifyTime);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Test the contents of a stored file
+        /// </summary>
+        /// <param name="zfe">Entry information of file to extract</param>
+        /// <returns>True if success, false if not.</returns>
+        /// <remarks>Unique decompression methods are Store and Deflate</remarks>
+        public bool TestFile(ZipFileEntry zfe) => ExtractFile(zfe, Stream.Null);
+
+        public unsafe bool Recompress(int compressionLevel = 6, bool throwOnFailure = false)
+        {
+            foreach (var zipFileEntry in Files)
+            {
+                Console.WriteLine(zipFileEntry.FilenameInZip);
+            }
+            
+            var files = new (ZipFileEntry Entry, nuint Data)[Files.Count];
+            try
+            {
+                var i = 0;
+                foreach (var zfe in Files)
+                {
+                    if (!ExtractToMemory(zfe, out var mem, throwOnFailure))
+                    {
+                        return false;
+                    }
+
+                    files[i++] = (zfe, (nuint)mem);
+                }
+
+                _zipFileStream.Seek(0, SeekOrigin.Begin);
+                Files.Clear();
+                
+                // Truncate the rest of the file
+                _zipFileStream.SetLength(0);
+                _zipFileStream.Flush();
+
+                foreach (var (zfe, data) in files)
+                {
+                    AddBuffer(
+                        new ReadOnlySpan<byte>((void*)data, (int)zfe.FileSize),
+                        zfe.FilenameInZip,
+                        zfe.ModifyTime,
+                        compressionLevel,
+                        zfe.Comment
+                    );
+                }
+                return true;
+            }
+            finally
+            {
+                foreach (var (_, data) in files)
+                {
+                    NativeMemory.Free((void*)data);
+                }
+            }
+        }
+
+        private unsafe bool ExtractToMemory(ZipFileEntry zfe, out byte* mem, bool throwOnFailure = false)
+        {
+            mem = (byte*)NativeMemory.Alloc(zfe.FileSize);
+            try
+            {
+                var stream = new UnmanagedMemoryStream(mem, 0, zfe.FileSize, FileAccess.Write);
+
+                using (var deflatedStream = OpenFile(zfe))
+                {
+                    if (deflatedStream == null) return throwOnFailure
+                        ? throw new InvalidOperationException($"{nameof(OpenFile)} failed! Either mismatching signature or unsupported compression method")
+                        : false;
+                    deflatedStream.CopyTo(stream);
+                }
+
+                var crc32 = UnsafeNativeMethods.GetCrc32(new ReadOnlySpan<byte>(mem, (int)zfe.FileSize));
+                var crcMatches = zfe.Crc32 == crc32;
+                return throwOnFailure
+                    ? crcMatches ? true : throw new InvalidOperationException("CRC mismatch")
+                    : crcMatches;
+            }
+            catch
+            {
+                NativeMemory.Free(mem);
+                mem = null;
+                throw;
+            }
+        }
+
         #endregion
 
         #region IDisposable Members
@@ -560,519 +1043,7 @@ namespace System.IO.Compression
         public void Dispose()
         {
             Close();
-            GC.Collect();
         }
         #endregion
     }
-
-    #region LIBDEFLATE wrapper
-    [SuppressUnmanagedCodeSecurityAttribute]
-    internal sealed partial class UnsafeNativeMethods
-    {
-        /// <summary>
-        /// Make CRC-32 checksum
-        /// </summary>
-        /// <param name="buffer">Data to checksum</param>
-        /// <returns>The updated checksum</returns>
-        public static uint GetCrc32(byte[] buffer)
-        {
-            IntPtr ptrBuffer = IntPtr.Zero;
-            GCHandle pinnedBuffer;
- 
-            try
-            {
-                //Get ptrInBuffer
-                pinnedBuffer = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-                ptrBuffer = pinnedBuffer.AddrOfPinnedObject();
-
-                uint crc = UnsafeNativeMethods.LibdeflateCrc32(0, ptrBuffer, buffer.Length);
-
-                pinnedBuffer.Free();
-
-                return crc;
-            }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn Libdeflate.Deflate"); }
-        }
-
-
-        /// <summary>
-        /// Deflate array 
-        /// </summary>
-        /// <param name="inBuffer">Data to deflate</param>
-        /// <param name="compressionLevel">The compression level on a zlib-like scale but with a higher maximum value (1 = fastest, 6 = medium/default, 9 = slow, 13 = slowest)</param>
-        /// <param name="outBuffer">Data deflated</param>
-        /// <param name="deflatedSize">Size of deflated data</param>
-        /// <param name="crc32">CRC of deflated data</param>
-        public static void Libdeflate(byte[] inBuffer, int compressionLevel, bool force, out byte[] outBuffer, out uint deflatedSize, out uint crc32)
-        {
-            IntPtr ptrInBuffer = IntPtr.Zero;
-            IntPtr ptrOutBuffer = IntPtr.Zero;
-            GCHandle pinnedInArray;
-            GCHandle pinnedOutArray;
-            int maxCompresedSize;
-            IntPtr compressor = IntPtr.Zero;
-            try
-            {
-                //Get ptrInBuffer
-                pinnedInArray = GCHandle.Alloc(inBuffer, GCHandleType.Pinned);
-                ptrInBuffer = pinnedInArray.AddrOfPinnedObject();
-
-                //Allocate compressor
-                compressor = UnsafeNativeMethods.LibdeflateAllocCompressor(compressionLevel);
-                if (compressor == null)
-                    throw new Exception("Out of memory");
-
-                //Get CRC32
-                crc32 = UnsafeNativeMethods.LibdeflateCrc32(0, ptrInBuffer, inBuffer.Length);
-
-                //Allocate output buffer
-                if (force)
-                    maxCompresedSize = UnsafeNativeMethods.LibdeflateDeflateCompressBound(compressor, inBuffer.Length);
-                else
-                    maxCompresedSize = inBuffer.Length - 1;
-
-                outBuffer = new byte[maxCompresedSize];
-                pinnedOutArray = GCHandle.Alloc(outBuffer, GCHandleType.Pinned);
-                ptrOutBuffer = pinnedOutArray.AddrOfPinnedObject();
-
-                //compress
-                deflatedSize = (uint)UnsafeNativeMethods.LibdeflateDeflateCompress(compressor, ptrInBuffer, inBuffer.Length, ptrOutBuffer, maxCompresedSize);
-
-                //Free resources
-                UnsafeNativeMethods.LibdeflateFreeCompressor(compressor);
-                pinnedInArray.Free();
-                pinnedOutArray.Free();
-            }
-            catch (Exception ex) { throw new Exception(ex.Message + "\r\nIn Libdeflate.Deflate"); }
-        }
-
-        /* ========================================================================== */
-        /*                             Compression                                    */
-        /* ========================================================================== */
-
-        /// <summary>
-        /// Allocates a new compressor that supports DEFLATE, zlib, and gzip compression.
-        ///
-        /// Note: for compression, the sliding window size is defined at compilation time
-        /// to 32768, the largest size permissible in the DEFLATE format. It cannot be
-        /// changed at runtime.
-        /// 
-        /// A single compressor is not safe to use by multiple threads concurrently.
-        /// However, different threads may use different compressors concurrently.
-        /// </summary>
-        /// <param name="compression_level">The compression level on a zlib-like scale but with a higher maximum value (1 = fastest, 6 = medium/default, 9 = slow, 13 = slowest)</param>
-        /// <returns>Pointer to the new compressor, or NULL if out of memory.</returns>
-        public static IntPtr LibdeflateAllocCompressor(int compression_level)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return libdeflate_alloc_compressor_x86(compression_level);
-                case 8:
-                    return libdeflate_alloc_compressor_x64(compression_level);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_alloc_compressor")]
-        private static extern IntPtr libdeflate_alloc_compressor_x86(int compression_level);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_alloc_compressor")]
-        private static extern IntPtr libdeflate_alloc_compressor_x64(int compression_level);
-
-        /// <summary>Performs raw DEFLATE in the ZLIB format compression on a buffer of data.</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="inData">Data to compress</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <param name="outBuffer">Data compresed</param>
-        /// <param name="out_nbytes_avail">Leght of buffer for data compresed</param>
-        /// <returns>Compressed size in bytes, or 0 if the data could not be compressed to 'out_nbytes_avail' bytes or fewer.</returns>
-        public static long LibdeflateZlibCompress(IntPtr compressor, IntPtr inBuffer, int in_nbytes, IntPtr outBuffer, int out_nbytes_avail)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (long)(libdeflate_zlib_compress_x86(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                case 8:
-                    return (long)(libdeflate_zlib_compress_x64(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_zlib_compress")]
-        private static extern UIntPtr libdeflate_zlib_compress_x86(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_zlib_compress")]
-        private static extern UIntPtr libdeflate_zlib_compress_x64(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-
-        /// <summary>Performs raw DEFLATE compression on a buffer of data.</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="inData">Data to compress</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <param name="outData">Data compresed</param>
-        /// <param name="out_nbytes_avail">Leght of buffer for data compresed</param>
-        /// <returns>Compressed size in bytes, or 0 if the data could not be compressed to 'out_nbytes_avail' bytes or fewer.</returns>
-        public static long LibdeflateDeflateCompress(IntPtr compressor, IntPtr inBuffer, int in_nbytes, IntPtr outBuffer, int out_nbytes_avail)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (long)(libdeflate_deflate_compress_x86(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                case 8:
-                    return (long)(libdeflate_deflate_compress_x64(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_deflate_compress")]
-        private static extern UIntPtr libdeflate_deflate_compress_x86(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_deflate_compress")]
-        private static extern UIntPtr libdeflate_deflate_compress_x64(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-
-        /// <summary>Performs raw GZIP compression on a buffer of data.</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="inData">Data to compress</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <param name="outData">Data compresed</param>
-        /// <param name="out_nbytes_avail">Leght of buffer for data compresed</param>
-        /// <returns>Compressed size in bytes, or 0 if the data could not be compressed to 'out_nbytes_avail' bytes or fewer.</returns>
-        public static long libdeflateGzipCompress(IntPtr compressor, IntPtr inBuffer, int in_nbytes, IntPtr outBuffer, int out_nbytes_avail)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (long)(libdeflate_gzip_compress_x86(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                case 8:
-                    return (long)(libdeflate_gzip_compress_x64(compressor, inBuffer, (UIntPtr)in_nbytes, outBuffer, (UIntPtr)out_nbytes_avail));
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_gzip_compress")]
-        private static extern UIntPtr libdeflate_gzip_compress_x86(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_gzip_compress")]
-        private static extern UIntPtr libdeflate_gzip_compress_x64(IntPtr compressor, IntPtr inBuffer, UIntPtr in_nbytes, IntPtr outBuffer, UIntPtr out_nbytes_avail);
-
-        /// <summary>Get the worst-case upper bound on the number of bytes of compressed data that may be produced
-        /// by compressing any buffer of length less than or equal to 'in_nbytes'.
-        /// Mathematically, this bound will necessarily be a number greater than or equal to 'in_nbytes'.
-        /// It may be an overestimate of the true upper bound.  
-        /// As a special case, 'compressor' may be NULL.  This causes the bound to be taken across *any*
-        /// libdeflate_compressor that could ever be allocated with this build of the library, with any options.
-        /// 
-        /// With block-based compression, it is usually preferable to separately store the uncompressed size of each
-        /// block and to store any blocks that did not compress to less than their original size uncompressed.  In that
-        /// scenario, there is no need to know the worst-case compressed size, since the maximum number of bytes of
-        /// compressed data that may be used would always be one less than the input length.  You can just pass a
-        /// buffer of that size to libdeflate_deflate_compress() and store the data uncompressed if libdeflate_deflate_compress()
-        /// returns 0, indicating that the compressed data did not fit into the provided output buffer.</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <returns>Worst-case upper bound on the number of bytes of compressed data that may be produced by compressing any buffer of length less than or equal to 'in_nbytes'.</returns>
-        public static int LibdeflateZlibCompressBound(IntPtr compressor, int in_nbytes)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (int)libdeflate_zlib_compress_bound_x86(compressor, (UIntPtr)in_nbytes);
-                case 8:
-                    return (int)libdeflate_zlib_compress_bound_x64(compressor, (UIntPtr)in_nbytes);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_zlib_compress_bound")]
-        private static extern UIntPtr libdeflate_zlib_compress_bound_x86(IntPtr compressor, UIntPtr in_nbytes);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_zlib_compress_bound")]
-        private static extern UIntPtr libdeflate_zlib_compress_bound_x64(IntPtr compressor, UIntPtr in_nbytes);
-
-        /// <summary>Returns a worst-case upper bound on the number of bytes of compressed data that may be produced
-        /// by compressing any buffer of length less than or equal to 'in_nbytes'.
-        /// Mathematically, this bound will necessarily be a number greater than or equal to 'in_nbytes'.
-        /// It may be an overestimate of the true upper bound.  
-        /// As a special case, 'compressor' may be NULL.  This causes the bound to be taken across *any*
-        /// libdeflate_compressor that could ever be allocated with this build of the library, with any options.
-        /// </summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <returns>Worst-case upper bound on the number of bytes of compressed data that may be produced by compressing any buffer of length less than or equal to 'in_nbytes'.</returns>
-        public static int LibdeflateDeflateCompressBound(IntPtr compressor, int in_nbytes)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (int)libdeflate_deflate_compress_bound_x86(compressor, (UIntPtr)in_nbytes);
-                case 8:
-                    return (int)libdeflate_deflate_compress_bound_x64(compressor, (UIntPtr)in_nbytes);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_deflate_compress_bound")]
-        private static extern UIntPtr libdeflate_deflate_compress_bound_x86(IntPtr compressor, UIntPtr in_nbytes);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_deflate_compress_bound")]
-        private static extern UIntPtr libdeflate_deflate_compress_bound_x64(IntPtr compressor, UIntPtr in_nbytes);
-
-        /// <summary>Returns a worst-case upper bound on the number of bytes of compressed data that may be produced
-        /// by compressing any buffer of length less than or equal to 'in_nbytes'.
-        /// Mathematically, this bound will necessarily be a number greater than or equal to 'in_nbytes'.
-        /// It may be an overestimate of the true upper bound.  
-        /// As a special case, 'compressor' may be NULL.  This causes the bound to be taken across *any*
-        /// libdeflate_compressor that could ever be allocated with this build of the library, with any options.
-        /// 
-        /// With block-based compression, it is usually preferable to separately store the uncompressed size of each
-        /// block and to store any blocks that did not compress to less than their original size uncompressed.  In that
-        /// scenario, there is no need to know the worst-case compressed size, since the maximum number of bytes of
-        /// compressed data that may be used would always be one less than the input length.  You can just pass a
-        /// buffer of that size to libdeflate_deflate_compress() and store the data uncompressed if libdeflate_deflate_compress()
-        /// returns 0, indicating that the compressed data did not fit into the provided output buffer.</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        /// <param name="in_nbytes">Length of data to compress</param>
-        /// <returns>Worst-case upper bound on the number of bytes of compressed data that may be produced by compressing any buffer of length less than or equal to 'in_nbytes'.</returns>
-        public static int LibdeflateGzipCompressBound(IntPtr compressor, int in_nbytes)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return (int)libdeflate_gzip_compress_bound_x86(compressor, (UIntPtr)in_nbytes);
-                case 8:
-                    return (int)libdeflate_gzip_compress_bound_x64(compressor, (UIntPtr)in_nbytes);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_gzip_compress_bound")]
-        private static extern UIntPtr libdeflate_gzip_compress_bound_x86(IntPtr compressor, UIntPtr in_nbytes);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_gzip_compress_bound")]
-        private static extern UIntPtr libdeflate_gzip_compress_bound_x64(IntPtr compressor, UIntPtr in_nbytes);
-
-        /// <summary>Frees a compressor that was allocated with libdeflate_alloc_compressor()</summary>
-        /// <param name="compressor">Pointer to the compressor</param>
-        public static void LibdeflateFreeCompressor(IntPtr compressor)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    libdeflate_free_compressor_x86(compressor);
-                    break;
-                case 8:
-                    libdeflate_free_compressor_x64(compressor);
-                    break;
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_free_compressor")]
-        private static extern void libdeflate_free_compressor_x86(IntPtr compressor);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_free_compressor")]
-        private static extern void libdeflate_free_compressor_x64(IntPtr compressor);
-
-
-        /* ========================================================================== */
-        /*                                Checksums                                   */
-        /* ========================================================================== */
-
-        /// <summary>Updates a running CRC-32 checksum</summary>
-        /// <param name="crc">Inial value of checksum. When starting a new checksum will be 0</param>
-        /// <param name="buffer">Data to checksum</param>
-        /// <param name="len">Length of data</param>
-        /// <returns>The updated checksum</returns>
-        public static UInt32 LibdeflateCrc32(UInt32 crc, IntPtr inBuffer, int len)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return libdeflate_crc32_x86(crc, inBuffer, (UIntPtr)len);
-                case 8:
-                    return libdeflate_crc32_x64(crc, inBuffer, (UIntPtr)len);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_crc32")]
-        private static extern UInt32 libdeflate_crc32_x86(UInt32 crc, IntPtr inBuffer, UIntPtr len);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_crc32")]
-        private static extern UInt32 libdeflate_crc32_x64(UInt32 crc, IntPtr inBuffer, UIntPtr len);
-
-        /// <summary>Updates a running Adler-32 checksum</summary>
-        /// <param name="crc">Inial value of checksum. When starting a new checksum will be 1</param>
-        /// <param name="buffer">Data to checksum</param>
-        /// <param name="len">Length of data</param>
-        /// <returns>The updated checksum</returns>
-        public static UInt32 LibdeflateAdler32(UInt32 crc, IntPtr inBuffer, int len)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    return libdeflate_adler32_x86(crc, inBuffer, (UIntPtr)len);
-                case 8:
-                    return libdeflate_adler32_x64(crc, inBuffer, (UIntPtr)len);
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("libdeflate_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_adler32")]
-        private static extern UInt32 libdeflate_adler32_x86(UInt32 crc, IntPtr inBuffer, UIntPtr len);
-        [DllImport("libdeflate_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "libdeflate_adler32")]
-        private static extern UInt32 libdeflate_adler32_x64(UInt32 crc, IntPtr inBuffer, UIntPtr len);
-    }
-    #endregion
-
-    #region ZOPFLI wrapper
-    /// <summary>
-    /// Zopfli Options
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public class ZopfliOptions
-    {
-        // Whether to print output
-        public Int32 verbose;
-
-        // Whether to print more detailed output
-        public Int32 verbose_more;
-
-        // Maximum amount of times to rerun forward and backward pass to optimize LZ77
-        // compression cost. Good values: 10, 15 for small files, 5 for files over
-        // several MB in size or it will be too slow.
-        public Int32 numiterations;
-
-        // If true, splits the data in multiple deflate blocks with optimal choice
-        // for the block boundaries. Block splitting gives better compression. Default:
-        // true (1).
-        public Int32 blocksplitting;
-
-        // If true, chooses the optimal block split points only after doing the iterative
-        // LZ77 compression. If false, chooses the block split points first, then does
-        // iterative LZ77 on each individual block. Depending on the file, either first
-        // or last gives the best compression. Default: false (0).
-        public Int32 blocksplittinglast;
-
-        // Maximum amount of blocks to split into (0 for unlimited, but this can give
-        // extreme results that hurt compression on some files). Default value: 15.
-        public Int32 blocksplittingmax;
-
-        /// <summary>
-        /// Initializes options used throughout the program with default values.
-        /// </summary>
-        public ZopfliOptions()
-        {
-            verbose = 0;
-            verbose_more = 0;
-            numiterations = 15;
-            blocksplitting = 1;
-            blocksplittinglast = 0;
-            blocksplittingmax = 15;
-        }
-    }
-
-    /// <summary>
-    /// Zopfli format options
-    /// </summary>
-    public enum ZopfliFormat
-    {
-        ZOPFLI_FORMAT_GZIP,
-        ZOPFLI_FORMAT_ZLIB,
-        ZOPFLI_FORMAT_DEFLATE
-    };
-
-    [SuppressUnmanagedCodeSecurityAttribute]
-    internal sealed partial class UnsafeNativeMethods
-    {
-        /// <summary>
-        /// Deflate array with Zopfli
-        /// </summary>
-        /// <param name="inBuffer">Data to deflate</param>
-        /// <param name="compressionLevel">Maximum amount of times to rerun forward and backward pass to optimize LZ77 (high = more compression and more slow)</param>
-        /// <param name="outBuffer">Data deflated</param>
-        /// <param name="deflatedSize">Size of deflated data</param>
-        /// <param name="crc32">CRC of deflated data</param>
-        public static void ZopfliDeflate(byte[] inBuffer, int compressionLevel, out byte[] outBuffer, out uint deflatedSize, out uint crc32)
-        {
-            ZopfliFormat type = ZopfliFormat.ZOPFLI_FORMAT_DEFLATE;
-            ZopfliOptions options = new ZopfliOptions();
-            IntPtr result = IntPtr.Zero;
-            UIntPtr resultSize = UIntPtr.Zero;
-
-            try
-            {
-                //Get CRC32
-                crc32 = GetCrc32(inBuffer);
-
-                // Compress the data via native methods
-                options.numiterations = compressionLevel-5;
-                ZopfliCompress(options, type, inBuffer, inBuffer.Length, ref result, ref resultSize);
-
-                // if compresed size is less that uncompresed size, copy data back to managed memory and return
-                if ((int)resultSize < inBuffer.Length)
-                {
-                    deflatedSize = (uint)resultSize;
-                    outBuffer = new byte[deflatedSize];
-                    Marshal.Copy(result, outBuffer, 0, (int)deflatedSize);
-                }
-                else
-                {
-                    deflatedSize = 0;
-                    outBuffer = null;
-                }
-            }
-            catch
-            {
-                throw;
-            }
-            finally
-            {
-                // Free unmanaged memory
-                ZopfliFree(result);
-            }
-        }
-
-        /// <summary>
-        /// Internal convert method to convert byte array to compressed byte array
-        /// </summary>
-        /// <param name="options">Compression options</param>
-        /// <param name="type">Format type, DEFLATE, GZIP, ZLIB</param>
-        /// <param name="inBuffer">Uncompressed data array</param>
-        /// 
-        public static void ZopfliCompress(ZopfliOptions options, ZopfliFormat output_type, byte[] inBuffer, int dataInSize, ref IntPtr dataOut, ref UIntPtr dataOutSize)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    zopfli_x86(options, output_type, inBuffer, dataInSize, ref dataOut, ref dataOutSize);
-                    break;
-                case 8:
-                    zopfli_x64(options, output_type, inBuffer, dataInSize, ref dataOut, ref dataOutSize);
-                    break;
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("zopfli_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ZopfliCompress")]
-        private static extern void zopfli_x86(ZopfliOptions options, ZopfliFormat output_type, byte[] inBuffer, int dataInSize, ref IntPtr dataOut, ref UIntPtr dataOutSize);
-        [DllImport("zopfli_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ZopfliCompress")]
-        private static extern void zopfli_x64(ZopfliOptions options, ZopfliFormat output_type, byte[] inBuffer, int dataInSize, ref IntPtr dataOut, ref UIntPtr dataOutSize);
-
-
-        /// <summary>
-        /// Frees memory allocated by the native Zopfli library.
-        /// </summary>
-        /// <param name="mem">Pointer to the unmanaged memory to free</param>
-        private static void ZopfliFree(IntPtr mem)
-        {
-            switch (IntPtr.Size)
-            {
-                case 4:
-                    ZopfliFree_x86(mem);
-                    break;
-                case 8:
-                    ZopfliFree_x64(mem);
-                    break;
-                default:
-                    throw new InvalidOperationException("Invalid platform. Can not find proper function");
-            }
-        }
-        [DllImport("zopfli_x86.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ZopfliFree")]
-        private static extern void ZopfliFree_x86(IntPtr mem);
-        [DllImport("zopfli_x64.dll", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ZopfliFree")]
-        private static extern void ZopfliFree_x64(IntPtr mem);
-    }
-    #endregion
 }
