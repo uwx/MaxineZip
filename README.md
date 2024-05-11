@@ -37,3 +37,8 @@ Examples:
 - [JosePineiro/LittleZip](https://github.com/JosePineiro/LittleZip)
 - [ebiggers/libdeflate](https://github.com/ebiggers/libdeflate)
 - [drivehappy/libzopfli-sharp](https://github.com/drivehappy/libzopfli-sharp)
+
+
+## Disclaimer
+I am not responsible for corrupted data or any other issues surrounding use of this program. Use at your own risk. Make
+backups.
