@@ -15,8 +15,8 @@ Usage:
     MaxineZip <output zip> <input file name> [-level <number>] [-fname <file name in zip>]
     MaxineZip -rezip <zip file>
 
-Levels 0-12 will use libdeflate (fast)
-Levels 13 and above will use Zopfli (extremely slow)
+Levels 0-12 will use libdeflate (fast)  
+Levels 13 and above will use Zopfli (extremely slow)  
 Default level: 6
 
 Examples:
