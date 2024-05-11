@@ -1,7 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Text;
 
-namespace System.IO.Compression;
+namespace MaxineZip;
 
     /// <summary>Unique class for decompression file. Represents a Zip file.</summary>
     public sealed class LittleUnZip : IDisposable

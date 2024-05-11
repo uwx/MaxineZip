@@ -45,4 +45,12 @@
   <ItemGroup>
     <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0-preview.1.24080.9" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="LICENSE.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="LICENSE.SixLabors.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

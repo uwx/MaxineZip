@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using System.IO.Compression;
+using MaxineZip;
 
 var root = @"root";
 

@@ -41,14 +41,16 @@
 // Important note: Compression levels above 12, use ZOPLI library. It is very slow.
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 
-namespace System.IO.Compression
+namespace MaxineZip
 {
     /// <summary>
     /// Unique class for compression/decompression file. Represents a Zip file.
@@ -202,7 +204,7 @@ namespace System.IO.Compression
             //Read the imput file
             var inBuffer = new FileInfo(pathFilename).Length > 0
                 ? File.ReadAllBytes(pathFilename)
-                : Array.Empty<byte>();
+                : [];
 
             var modifyTime = File.GetLastWriteTime(pathFilename);
 
@@ -244,6 +246,7 @@ namespace System.IO.Compression
                 {
                     // Deflate the Source and get ZipFileEntry data
                     if (compressionLevel > 12)
+                    {
                         UnsafeNativeMethods.ZopfliDeflate(
                             inBuffer,
                             compressionLevel,
@@ -251,7 +254,9 @@ namespace System.IO.Compression
                             out zfe.CompressedSize,
                             out zfe.Crc32
                         );
+                    }
                     else
+                    {
                         UnsafeNativeMethods.Libdeflate(
                             inBuffer,
                             compressionLevel,
@@ -260,6 +265,7 @@ namespace System.IO.Compression
                             out zfe.CompressedSize,
                             out zfe.Crc32
                         );
+                    }
 
                     // If not reduced the size, use the original data.
                     if (zfe.CompressedSize == 0)
@@ -421,20 +427,9 @@ namespace System.IO.Compression
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void Write<T>(T value) where T : unmanaged
+        private void Write<T>(T value) where T : unmanaged
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            static bool TryWriteBytes(Span<byte> destination, T value)
-            {
-                if (typeof(T) == typeof(ushort)) return BitConverter.TryWriteBytes(destination, (ushort)(object)value);
-                if (typeof(T) == typeof(uint)) return BitConverter.TryWriteBytes(destination, (uint)(object)value);
-
-                return false;
-            }
-
-            Span<byte> temp = stackalloc byte[sizeof(T)];
-            TryWriteBytes(temp, value);
-            _zipFileStream.Write(temp);
+            _zipFileStream.Write(MemoryMarshal.Cast<T, byte>(MemoryMarshal.CreateReadOnlySpan(ref value, 1)));
         }
 
         /* End of central dir record:
@@ -452,10 +447,11 @@ namespace System.IO.Compression
         {
             _zipFileStream.Write([ 0x50, 0x4B, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00 ]); // End of central directory signature = 0x06054b50 + Number of this disk + Disk where central directory starts
 
-            Span<byte> temp = stackalloc byte[2];
-            BitConverter.TryWriteBytes(temp, (ushort)(Files.Count + _existingFiles));
-            _zipFileStream.Write(temp); // Number of central directory records on this disk (or 0xffff for ZIP64)
-            _zipFileStream.Write(temp); // Total number of central directory records (or 0xffff for ZIP64)
+            var fileCount = (ushort)(Files.Count + _existingFiles);
+            Span<ushort> temp = stackalloc ushort[2];
+            temp[0] = fileCount; // Number of central directory records on this disk (or 0xffff for ZIP64)
+            temp[1] = fileCount; // Total number of central directory records (or 0xffff for ZIP64)
+            _zipFileStream.Write(MemoryMarshal.Cast<ushort, byte>(temp)); 
 
             Write(size); // Size of central directory (bytes) (or 0xffffffff for ZIP64)
 
@@ -500,6 +496,7 @@ namespace System.IO.Compression
                 5-10 Minute (059) 
                 11-15 Hour (023 on a 24-hour clock) 
         */
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint DateTimeToDosTime(DateTime dt)
         {
             return (uint)(
@@ -517,6 +514,7 @@ namespace System.IO.Compression
                 5-10 Minute (059)
                 11-15 Hour (023 on a 24-hour clock)
         */
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static DateTime DosTimeToDateTime(uint dt)
         {
             return new DateTime(
@@ -765,7 +763,7 @@ namespace System.IO.Compression
                         }
                         else
                         {
-                            zfe.Comment = "";
+                            zfe.Comment = string.Empty;
                         }
 
                         Files.Add(zfe);
@@ -791,10 +789,10 @@ namespace System.IO.Compression
         public Stream? OpenFile(ZipFileEntry zfe)
         {
             // check signature
-            var signature = new byte[4];
+            var signature = 0;
             _zipFileStream.Seek(zfe.HeaderOffset, SeekOrigin.Begin);
-            _zipFileStream.ReadExactly(signature, 0, 4);
-            if (BitConverter.ToUInt32(signature, 0) != 0x04034b50)
+            _zipFileStream.ReadExactly(MemoryMarshal.Cast<int, byte>(MemoryMarshal.CreateSpan(ref signature, 1)));
+            if (signature != 0x04034b50)
             {
                 return null;
             }

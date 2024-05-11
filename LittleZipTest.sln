@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LittleZipTest", "LittleZip\LittleZipTest.csproj", "{3DA1E6D8-297C-4563-8CE4-578CC88B23EE}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaxineZip", "LittleZip\MaxineZip.csproj", "{3DA1E6D8-297C-4563-8CE4-578CC88B23EE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZipDedup", "ZipDedup\ZipDedup.csproj", "{64AF85B2-DF9C-4B10-8EAE-345B17F07A4F}"
 EndProject

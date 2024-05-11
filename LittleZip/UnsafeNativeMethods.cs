@@ -1,10 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
 
 [assembly: DisableRuntimeMarshalling]
 
-namespace System.IO.Compression;
+namespace MaxineZip;
 
 /// <summary>
 /// Zopfli Options

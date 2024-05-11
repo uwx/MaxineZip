@@ -1,7 +1,9 @@
-﻿using System.Threading;
+﻿using System;
+using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace System.IO.Compression;
+namespace MaxineZip;
 
 public sealed class NoDisposeStream(Stream streamImplementation) : Stream
 {
